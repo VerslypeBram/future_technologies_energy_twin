@@ -14,11 +14,27 @@ export const PRESETS = {
 export function createCameraRig(camera, controls, cars) {
   let fly = null;
   let follow = null;
+  let sun = null; // { dir: () => Vector3, saved: { maxPolar, minDist } }
+  const SUN_POS = new THREE.Vector3(0, 1.7, 8.5); // staat voor het huis en kijkt naar de zon
   const tmp = new THREE.Vector3();
+  const look = new THREE.Vector3();
+
+  function sunTarget(dir) {
+    look.copy(dir);
+    look.y = Math.max(look.y, 0.07); // onder de horizon: kijk naar de horizon in die richting
+    return look.normalize().multiplyScalar(30).add(SUN_POS);
+  }
+  function endSun() {
+    if (!sun) return;
+    controls.maxPolarAngle = sun.saved.maxPolar;
+    controls.minDistance = sun.saved.minDist;
+    sun = null;
+  }
 
   // wie zelf gaat slepen onderbreekt de vlucht
   controls.addEventListener('start', () => {
     fly = null;
+    endSun();
   });
 
   const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
@@ -28,6 +44,7 @@ export function createCameraRig(camera, controls, cars) {
       const p = PRESETS[name];
       if (!p) return;
       follow = null;
+      endSun();
       const toPos = new THREE.Vector3(...p.pos);
       const toTarget = new THREE.Vector3(...p.target);
       if (REDUCED) {
@@ -37,8 +54,28 @@ export function createCameraRig(camera, controls, cars) {
       }
       fly = { fromPos: camera.position.clone(), fromTarget: controls.target.clone(), toPos, toTarget, t: 0 };
     },
+    // Kijk vanaf een vast punt naar de zon en blijf hem volgen terwijl hij beweegt
+    followSun(on, dirFn) {
+      if (!on) return endSun();
+      follow = null;
+      if (!sun) sun = { dir: dirFn, saved: { maxPolar: controls.maxPolarAngle, minDist: controls.minDistance } };
+      sun.dir = dirFn;
+      controls.maxPolarAngle = Math.PI; // de camera kijkt omhoog: geen vloerlimiet
+      controls.minDistance = 0.01;
+      const toTarget = sunTarget(dirFn());
+      if (REDUCED) {
+        camera.position.copy(SUN_POS);
+        controls.target.copy(toTarget);
+        return;
+      }
+      fly = { fromPos: camera.position.clone(), fromTarget: controls.target.clone(), toPos: SUN_POS.clone(), toTarget, t: 0 };
+    },
+    get sunActive() {
+      return sun !== null;
+    },
     follow(index) {
       fly = null;
+      endSun();
       follow = index === null ? null : cars[index];
     },
     get following() {
@@ -51,6 +88,9 @@ export function createCameraRig(camera, controls, cars) {
         camera.position.lerpVectors(fly.fromPos, fly.toPos, e);
         controls.target.lerpVectors(fly.fromTarget, fly.toTarget, e);
         if (fly.t >= 1) fly = null;
+      }
+      if (sun && !fly) {
+        controls.target.lerp(sunTarget(sun.dir()), Math.min(1, dt * 4));
       }
       if (follow) {
         follow.getWorldPosition(tmp);

@@ -82,7 +82,7 @@ export function createHud({ history, actions }) {
   bottombar.innerHTML = `
     <div class="presets" role="group" aria-label="Camera">
       <div class="seg">${Object.entries(PRESETS).map(([id, p]) => `<button data-preset="${id}">${p.label}</button>`).join('')}</div>
-      <div class="seg"><button id="followBtn" aria-pressed="false">Volg auto</button></div>
+      <div class="seg"><button id="followBtn" aria-pressed="false">Volg auto</button><button id="sunBtn" aria-pressed="false">Volg zon</button></div>
     </div>
     <div class="timeline">
       <button id="tlPlay" class="btn" aria-label="Pauzeren of afspelen" style="min-width:38px"></button>
@@ -103,6 +103,7 @@ export function createHud({ history, actions }) {
     e.currentTarget.setAttribute('aria-pressed', String(on));
     actions.follow(on ? 0 : null);
   };
+  b$('#sunBtn').onclick = () => actions.followSun(!actions.sunActive());
   b$('#tlPlay').onclick = () => {
     if (history.scrubbing) history.resume();
     else world.paused = !world.paused;
@@ -224,6 +225,7 @@ export function createHud({ history, actions }) {
       b$('#tlLabel').textContent = `Dag ${Math.floor(t / 24) + 1}  ${clockText(t % 24)}`;
       b$('#tlPlay').textContent = history.scrubbing || world.paused ? 'Start' : 'Pauze';
       b$('#tlResume').hidden = !history.scrubbing;
+      b$('#sunBtn').setAttribute('aria-pressed', String(actions.sunActive()));
       v$('#goal').textContent = goalText();
     },
   };

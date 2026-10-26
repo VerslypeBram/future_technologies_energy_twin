@@ -26,6 +26,7 @@ import { createHud } from './src/hud.js';
 import { real, initRealData, sunAt, onLocationChange } from './src/realdata.js';
 import { createSatellite } from './src/satellite.js';
 import { createMoon } from './src/moon.js';
+import { createSunDisc } from './src/sundisc.js';
 import { createOutdoor } from './src/outdoor.js';
 import { createSeasons } from './src/seasons.js';
 import { createSnow } from './src/snow.js';
@@ -146,6 +147,7 @@ const post = createPost(renderer, scene, camera);
 post.resize(initial.w, initial.h);
 const skyBox = createSky(scene, renderer);
 const moon = createMoon(scene);
+const sunDisc = createSunDisc(scene);
 const outdoor = createOutdoor(scene);
 const flows = createFlows(scene);
 flows.setVisible(false);
@@ -167,11 +169,14 @@ const hud = createHud({
   actions: {
     flyTo: (name) => rig.flyTo(name),
     follow: (index) => rig.follow(index),
+    followSun: (on) => rig.followSun(on, () => sunDirection(world.hour)),
+    sunActive: () => rig.sunActive,
     setThermal(on) {
       thermal.set(on);
       env.setThermal(on);
       skyBox.setVisible(!on);
       moon.setVisible(!on);
+      sunDisc.setVisible(!on);
       outdoor.setVisible(!on);
       snow.setVisible(!on);
       life.setVisible(!on);
@@ -263,6 +268,7 @@ function animate() {
   // Lucht, sterren en mist
   skyBox.update(sunDir, sunUp, world.cloud);
   moon.update(dateAt(), sunUp, world.cloud);
+  sunDisc.update(sunDir, world.cloud);
   outdoor.update(outdoorLevel(state));
 
   // Seizoen, sneeuw, leven en extra installaties

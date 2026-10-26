@@ -92,7 +92,7 @@ export function createUI(camera, canvas, windows, { onSatellite } = {}) {
         <div class="field">
           <label for="speed">Simulatiesnelheid <span class="v"><span id="speedLabel"></span></span></label>
           <input id="speed" type="range" min="0" max="1" step="0.05">
-          <button id="realtime" class="btn" style="margin-top:6px">Realtime (1×)</button>
+          <div style="display:flex;gap:6px;margin-top:6px"><button id="realtime" class="btn">Realtime (1×)</button><button id="timelapse" class="btn">Dag in 24 s</button></div>
         </div>
         <div class="field"><button id="now" class="btn">Naar echte tijd</button></div>
         <div class="field">
@@ -171,6 +171,10 @@ export function createUI(camera, canvas, windows, { onSatellite } = {}) {
   $('evcharge').onclick = () => (state.evCharging = !state.evCharging);
   $('auto').onclick = () => (state.autoMode = !state.autoMode);
   $('reset').onclick = resetDay;
+  $('timelapse').onclick = () => {
+    world.hoursPerSec = 1; // 1 uur per seconde: de zon trekt in 24 seconden over de lucht
+    $('speed').value = 1;
+  };
   $('realtime').onclick = () => {
     world.hoursPerSec = REALTIME;
     $('speed').value = 0;
