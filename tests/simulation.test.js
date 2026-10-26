@@ -8,7 +8,7 @@ stubFetch(startMs);
 
 const sim = await import('../src/simulation.js');
 const rd = await import('../src/realdata.js');
-const { world, state, baseline, step, priceAt, priceIsCheap, priceIsPeak, sunFactor } = sim;
+const { world, state, baseline, step, priceAt, priceIsCheap, priceIsPeak, sunFactor, outdoorLevel, OUTDOOR_POWER_KW } = sim;
 
 function setHour(h) {
   world.simTime = Math.floor(world.simTime / 24) * 24 + h;
@@ -98,5 +98,44 @@ describe('prijs: live (Energy-Charts)', () => {
   it('valt terug op de vaste tabel buiten de data', () => {
     world.weatherMode = 'live';
     expect(priceAt(world.hour + 24 * 30)).toBeGreaterThan(0); // geen crash, terugval op tabel
+  });
+});
+
+describe('buitenverlichting', () => {
+  it('is overdag uit en snachts aan', () => {
+    state.autoMode = false;
+    state.outdoorOn = true;
+    setHour(13);
+    expect(outdoorLevel(state)).toBe(0);
+    setHour(21);
+    expect(outdoorLevel(state)).toBe(1);
+  });
+
+  it('het slimme huis dimt na 23:00, het referentiehuis niet', () => {
+    state.autoMode = true;
+    setHour(21);
+    expect(outdoorLevel(state)).toBe(1);
+    setHour(23.5);
+    expect(outdoorLevel(state)).toBe(0.4);
+    expect(outdoorLevel(baseline)).toBe(1);
+  });
+
+  it('de handschakelaar zet de verlichting uit', () => {
+    state.autoMode = false;
+    state.outdoorOn = false;
+    setHour(22);
+    expect(outdoorLevel(state)).toBe(0);
+    state.outdoorOn = true;
+  });
+
+  it('telt mee in het huisverbruik', () => {
+    state.autoMode = false;
+    state.heaterOn = false;
+    state.fanOn = false;
+    setHour(22);
+    for (let i = 0; i < 5; i++) step(0.1);
+    expect(state.outdoorKw).toBeCloseTo(OUTDOOR_POWER_KW, 6);
+    expect(state.flows.home).toBeGreaterThanOrEqual(OUTDOOR_POWER_KW - 1e-9);
+    state.heaterOn = true;
   });
 });

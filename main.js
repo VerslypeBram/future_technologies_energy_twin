@@ -25,8 +25,10 @@ import { createCameraRig } from './src/camera.js';
 import { createHud } from './src/hud.js';
 import { initRealData, sunAt, onLocationChange } from './src/realdata.js';
 import { createSatellite } from './src/satellite.js';
+import { createMoon } from './src/moon.js';
+import { createOutdoor } from './src/outdoor.js';
 import { applyScenario, updateScenario } from './src/scenarios.js';
-import { state, baseline, world, step, comfortScore, sunFactor, sunEff, dateAt, isHome, batteryPercent, roomTemps } from './src/simulation.js';
+import { state, baseline, world, step, comfortScore, sunFactor, sunEff, dateAt, outdoorLevel, isHome, batteryPercent, roomTemps } from './src/simulation.js';
 
 // Het 3D-venster is een vast vak in de layout; alles schaalt mee met dat vak
 const view = document.getElementById('view');
@@ -139,6 +141,8 @@ const weather = createWeather(scene);
 const post = createPost(renderer, scene, camera);
 post.resize(initial.w, initial.h);
 const skyBox = createSky(scene, renderer);
+const moon = createMoon(scene);
+const outdoor = createOutdoor(scene);
 const flows = createFlows(scene);
 flows.setVisible(false);
 const inspector = createInspector({ camera, canvas: renderer.domElement, inspectables, outline: post.outline });
@@ -159,6 +163,8 @@ const hud = createHud({
       thermal.set(on);
       env.setThermal(on);
       skyBox.setVisible(!on);
+      moon.setVisible(!on);
+      outdoor.setVisible(!on);
       scene.background = on ? new THREE.Color(0x05060a) : null;
       post.setBloom(!on);
       cut.set(on ? 0 : cutValue);
@@ -182,6 +188,7 @@ const hud = createHud({
     setQuality(q) {
       quality = q;
       post.setEnabled(q === 'high');
+      outdoor.setLights(q === 'high');
     },
   },
 });
@@ -244,6 +251,8 @@ function animate() {
 
   // Lucht, sterren en mist
   skyBox.update(sunDir, sunUp, world.cloud);
+  moon.update(dateAt(), sunUp, world.cloud);
+  outdoor.update(outdoorLevel(state));
 
   // Zonnepanelen gloeien licht bij opbrengst
   panelMaterial.emissiveIntensity = sunPower * 0.6;
