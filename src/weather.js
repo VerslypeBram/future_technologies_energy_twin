@@ -4,6 +4,7 @@ import { cloudPuff } from './textures.js';
 
 const CLOUD_COUNT = 8;
 const RAIN_COUNT = 1400;
+const SNOW_COUNT = 1600;
 const SPRITES_PER_CLOUD = 6;
 
 // Wolken als zachte sprite-clusters, regen als korte schuine streepjes
@@ -39,6 +40,17 @@ export function createWeather(scene) {
   rain.frustumCulled = false;
   scene.add(rain);
 
+  // Sneeuw: trage vlokken die licht heen en weer zwaaien
+  const flakePositions = new Float32Array(SNOW_COUNT * 3);
+  const flakes = [];
+  for (let i = 0; i < SNOW_COUNT; i++) flakes.push({ x: (Math.random() - 0.5) * 32, y: Math.random() * 14, z: (Math.random() - 0.5) * 32, phase: Math.random() * 6.28, speed: 0.6 + Math.random() * 0.6 });
+  const flakeGeometry = new THREE.BufferGeometry();
+  flakeGeometry.setAttribute('position', new THREE.BufferAttribute(flakePositions, 3));
+  const snowFall = new THREE.Points(flakeGeometry, new THREE.PointsMaterial({ color: 0xffffff, size: 0.09, transparent: true, opacity: 0.9, fog: false, depthWrite: false }));
+  snowFall.frustumCulled = false;
+  scene.add(snowFall);
+  let time = 0;
+
   const white = new THREE.Color(0xffffff);
   const grey = new THREE.Color(0x7d848c);
   const tint = new THREE.Color();
@@ -58,7 +70,22 @@ export function createWeather(scene) {
         if (c.position.x > 90) c.position.x = -90;
       });
 
-      const raining = world.weather === 'regen' && cloud > 0.6;
+      time += dt;
+      const snowing = world.snowing;
+      const raining = !snowing && world.weather === 'regen' && cloud > 0.6;
+      snowFall.visible = snowing;
+      if (snowing) {
+        for (let i = 0; i < SNOW_COUNT; i++) {
+          const f = flakes[i];
+          f.y -= dt * 1.4 * f.speed;
+          if (f.y < 0) f.y += 14;
+          const o = i * 3;
+          flakePositions[o] = f.x + Math.sin(time * 0.8 + f.phase) * 0.4;
+          flakePositions[o + 1] = f.y;
+          flakePositions[o + 2] = f.z + Math.cos(time * 0.6 + f.phase) * 0.4;
+        }
+        flakeGeometry.attributes.position.needsUpdate = true;
+      }
       rain.visible = raining;
       if (raining) {
         for (let i = 0; i < RAIN_COUNT; i++) {

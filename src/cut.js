@@ -19,6 +19,7 @@ export function createCut(renderer, house) {
 
   let value = 0;
   return {
+    planes,
     get value() {
       return value;
     },

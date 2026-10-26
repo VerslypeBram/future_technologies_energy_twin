@@ -1,6 +1,6 @@
 # Woning EMS – digital twin van een slim gebouw
 
-Interactieve 3D-simulatie (three.js) van een woning met zonnepanelen, windmolens, batterij, elektrische verwarming en twee elektrische auto's. Een energiebeheersysteem (EMS) stuurt de woning en wordt vergeleken met een standaardhuis zonder automatisering.
+Interactieve 3D-simulatie (three.js) van een woning met zonnepanelen, windmolens, batterij(en), warmtepomp, regenton en twee elektrische auto's. Een energiebeheersysteem (EMS) stuurt de woning en wordt vergeleken met een standaardhuis zonder automatisering.
 
 Fase 2 ("van maquette naar echt"): de scène wordt gestuurd door **echte data**.
 
@@ -49,6 +49,9 @@ Energy-Charts staat geen aanroepen vanuit andere origins toe (CORS). Daarom gaan
 ## Gebruik
 
 - **Omgeving**: weer (live of mock), locatie via de minikaart, satelliet-ondergrond, simulatiesnelheid, "Naar echte tijd".
+- **Installaties**: warmtepomp (rendement volgt de buitentemperatuur), extra batterij (+5 kWh) en een regenton met pomp.
+- **Seizoenen en weer**: bladeren kleuren, vallen en groeien volgens de echte datum; sneeuw blijft liggen bij vorst, smelt bij dooi en bedekt de zonnepanelen (minder opbrengst).
+- **Leven**: auto's op de straat, een voetganger op de stoep en vogels overdag.
 - **Bediening**: automaatregeling aan/uit, verwarming, ventilatie, rolluiken, EV-laden. Een raam aanklikken opent of sluit het.
 - **Scenario's**: hittegolf, storm, strenge winter, stroomstoring (met doelen).
 - **Sneltoetsen**: A automaat, I warmtecamera, L labels, spatie pauze.
