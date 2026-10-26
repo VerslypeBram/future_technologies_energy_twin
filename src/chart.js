@@ -145,7 +145,7 @@ export function createChart() {
         fmt: (v) => (v % 1 ? v.toFixed(1) : v) + '',
         series: [
           { key: 'kwh', color: COLORS.grid },
-          { key: 'price', color: COLORS.price, min: 0, max: 0.5, step: true },
+          { key: 'price', color: COLORS.price, min: 0, max: 0.6, step: true },
         ],
         rightScale: { min: 0, max: 0.5, ticks: [0, 0.25, 0.5], fmt: (v) => v.toFixed(2) },
         legend: [

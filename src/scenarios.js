@@ -1,7 +1,7 @@
-import { world, state, baseline, resetDay, costEuro, averageComfort } from './simulation.js';
+import { world, REALTIME, state, baseline, resetDay, costEuro, averageComfort } from './simulation.js';
 
 export const SCENARIOS = {
-  normaal: { label: 'Normaal', hour: 12, baseOutside: 5, weatherMode: 'auto', windBoost: 0, gridOnline: true },
+  normaal: { label: 'Normaal', hour: 12, baseOutside: 5, weatherMode: 'live', windBoost: 0, gridOnline: true },
   hittegolf: { label: 'Hittegolf', hour: 10, baseOutside: 32, weatherMode: 'zon', windBoost: 0, gridOnline: true, goal: 'saving', hours: 24, goalText: 'Bespaar 40% op kosten met gelijk comfort' },
   storm: { label: 'Storm', hour: 6, baseOutside: 7, weatherMode: 'regen', windBoost: 0.5, gridOnline: true, goal: 'saving', hours: 24, goalText: 'Bespaar 40% op kosten met gelijk comfort' },
   winter: { label: 'Strenge winter', hour: 6, baseOutside: -8, weatherMode: 'bewolkt', windBoost: 0, gridOnline: true, goal: 'saving', hours: 24, goalText: 'Bespaar 40% op kosten met gelijk comfort' },
@@ -14,6 +14,7 @@ let failed = false;
 export function applyScenario(name) {
   const s = SCENARIOS[name];
   if (!s) return;
+  if (world.hoursPerSec === REALTIME && s.goal) world.hoursPerSec = 0.25; // scenario's met doel hebben versnelling nodig
   world.hour = s.hour;
   world.simTime = Math.floor(world.simTime / 24) * 24 + s.hour;
   world.baseOutside = s.baseOutside;

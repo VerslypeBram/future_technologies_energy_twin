@@ -1,4 +1,7 @@
 import * as THREE from 'three';
+import { real, onLocationChange } from './realdata.js';
+import { createMinimap } from './minimap.js';
+import { hasMapbox } from './satellite.js';
 import {
   state,
   baseline,
@@ -10,6 +13,9 @@ import {
   costEuro,
   co2Kg,
   priceAt,
+  priceIsCheap,
+  priceIsPeak,
+  REALTIME,
   isHome,
   batteryPercent,
   evPercent,
@@ -31,7 +37,7 @@ const kv = (label, id, unit = '') =>
 const toggle = (label, id) =>
   `<div class="ctl"><span class="k">${label}</span><button id="${id}" class="switch" role="switch" aria-checked="false" aria-label="${label}">UIT</button></div>`;
 
-export function createUI(camera, canvas, windows) {
+export function createUI(camera, canvas, windows, { onSatellite } = {}) {
   const panel = document.createElement('div');
   panel.id = 'panel';
   panel.innerHTML = `
@@ -59,7 +65,8 @@ export function createUI(camera, canvas, windows) {
         <div class="field" style="margin-top:0">
           <label for="weatherMode">Weer</label>
           <select id="weatherMode">
-            <option value="auto">Automatisch</option>
+            <option value="live">Live (Open-Meteo)</option>
+            <option value="auto">Automatisch (mock)</option>
             <option value="zon">Zonnig</option>
             <option value="bewolkt">Bewolkt</option>
             <option value="regen">Regen</option>
@@ -70,9 +77,18 @@ export function createUI(camera, canvas, windows) {
           <input id="out" type="range" min="-10" max="35" step="1">
         </div>
         <div class="field">
-          <label for="speed">Simulatiesnelheid <span class="v"><span id="speedLabel"></span> u/s</span></label>
+          <label for="speed">Simulatiesnelheid <span class="v"><span id="speedLabel"></span></span></label>
           <input id="speed" type="range" min="0" max="1" step="0.05">
+          <button id="realtime" class="btn" style="margin-top:6px">Realtime (1×)</button>
         </div>
+        <div class="field"><button id="now" class="btn">Naar echte tijd</button></div>
+        <div class="field">
+          <label>Locatie (klik op de kaart)</label>
+          <div id="minimap" style="height:170px;margin-top:4px;border:1px solid var(--line)"></div>
+          <div style="margin-top:6px"><button id="sat" class="btn" ${hasMapbox ? '' : 'disabled'}>Satelliet-ondergrond: UIT</button></div>
+        </div>
+        <div class="status-line" id="dataStatus" role="status"></div>
+        <div class="note">Weer: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (CC BY 4.0). Prijs: <a href="https://www.energy-charts.info/" target="_blank" rel="noopener">Energy-Charts</a> (CC BY 4.0, Bundesnetzagentur | SMARD.de), schatting incl. nettarief en taksen. Zonnestand: <a href="https://github.com/mourner/suncalc" target="_blank" rel="noopener">SunCalc</a>.</div>
         <div style="margin-top:8px">
           ${kv('Weer nu', 'weatherNow')}
           ${kv('Wind', 'wind', 'm/s')}
@@ -137,6 +153,26 @@ export function createUI(camera, canvas, windows) {
   $('evcharge').onclick = () => (state.evCharging = !state.evCharging);
   $('auto').onclick = () => (state.autoMode = !state.autoMode);
   $('reset').onclick = resetDay;
+  $('realtime').onclick = () => {
+    world.hoursPerSec = REALTIME;
+    $('speed').value = 0;
+  };
+  const minimap = createMinimap($('minimap'));
+  panel.querySelector('#minimap').closest('details').addEventListener('toggle', (e) => e.target.open && minimap?.show());
+  onLocationChange((loc) => minimap?.moveTo(loc.lat, loc.lon));
+  let sat = false;
+  $('sat').onclick = () => {
+    sat = !sat;
+    $('sat').textContent = `Satelliet-ondergrond: ${sat ? 'AAN' : 'UIT'}`;
+    onSatellite?.(sat);
+  };
+  $('now').onclick = () => {
+    const d = new Date();
+    world.hour = d.getHours() + d.getMinutes() / 60;
+    world.simTime = Math.floor(world.simTime / 24) * 24 + world.hour;
+    world.weatherMode = 'live';
+    $('weatherMode').value = 'live';
+  };
 
   // Klik op een raam (coördinaten ten opzichte van het canvas)
   const raycaster = new THREE.Raycaster();
@@ -175,16 +211,19 @@ export function createUI(camera, canvas, windows) {
     setSwitch('shutters', state.shuttersClosed);
     setSwitch('evcharge', state.evCharging);
     text('outLabel', world.baseOutside);
-    text('speedLabel', fmt(world.hoursPerSec, 2));
+    if ($('speed') !== document.activeElement) $('speed').value = world.hoursPerSec === REALTIME ? 0 : world.hoursPerSec;
+    text('speedLabel', world.hoursPerSec === REALTIME ? '1× (realtime)' : fmt(world.hoursPerSec, 2) + ' u/s');
     text('targetLabel', fmt(state.targetTemp, 1));
     if (state.autoMode) $('target').value = state.targetTemp;
 
+    if ($('weatherMode') !== document.activeElement) $('weatherMode').value = world.weatherMode;
     text('weatherNow', WEATHER_LABEL[world.weather]);
+    text('dataStatus', world.weatherMode === 'live' ? `${real.status} · ${real.location.label} (${fmt(real.location.lat, 2)}, ${fmt(real.location.lon, 2)}) · Prijs: ${real.priceStatus}` : 'Mock-weer actief');
     text('wind', fmt(world.wind * 15, 1));
     text('outNow', fmt(world.outsideTemp, 1));
     const price = priceAt();
     text('price', fmt(price, 2));
-    color('price', price > 0.4 ? 'var(--alarm)' : price < 0.2 ? 'var(--ok)' : 'var(--text)');
+    color('price', priceIsPeak() ? 'var(--alarm)' : priceIsCheap() ? 'var(--ok)' : 'var(--text)');
     text('resident', isHome() ? 'Thuis' : 'Afwezig');
 
     text('inside', fmt(state.insideTemp, 1));

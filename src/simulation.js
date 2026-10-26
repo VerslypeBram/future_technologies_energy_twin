@@ -1,12 +1,19 @@
 // Vereenvoudigd model: geen three.js, alleen getallen.
+import { real, sampleWeather, sunAt, samplePrice, priceQuantile } from './realdata.js';
+
+const startDate = new Date();
+const startHour = startDate.getHours() + startDate.getMinutes() / 60;
+const dayStartMs = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate()).getTime();
+
+export const REALTIME = 1 / 3600; // u/s: 1 simulatie-uur = 1 echt uur
 
 // Gedeelde wereld: klok en weer gelden voor alle huizen
 export const world = {
-  hour: 12,
-  hoursPerSec: 0.25, // snelheid van de dag
+  hour: startHour, // start op de echte tijd
+  hoursPerSec: REALTIME, // start op realtime; versnellen kan met de schuif
   baseOutside: 5, // slider: gemiddelde buitentemp
   outsideTemp: 5, // berekend: basis + dagcurve + weer
-  weatherMode: 'auto', // auto | zon | bewolkt | regen
+  weatherMode: 'live', // live (Open-Meteo) | auto | zon | bewolkt | regen
   weather: 'zon',
   weatherTimer: 3, // gesimuleerde uren tot volgend weer
   cloud: 0,
@@ -15,7 +22,8 @@ export const world = {
   gridOnline: true, // scenario: stroomstoring
   scenario: null,
   scenarioHours: 0, // gesimuleerde uren sinds het scenario begon
-  simTime: 12, // totaal gesimuleerde uren (voor de tijdlijn)
+  radiation: 0, // W/m² (live)
+  simTime: startHour, // totaal gesimuleerde uren (voor de tijdlijn)
   paused: false,
 };
 
@@ -76,14 +84,23 @@ export function createHouseState({ dumb = false } = {}) {
 export const state = createHouseState();
 export const baseline = createHouseState({ dumb: true });
 
-// 0 's nachts, 1 rond het middaguur
-export function sunFactor(hour = world.hour) {
-  if (hour < 6 || hour > 18) return 0;
-  return Math.sin(((hour - 6) / 12) * Math.PI);
+// Tijdstip in de simulatie (ms): echte datum van vandaag + gesimuleerde uren
+export function dateAt(hour = world.hour) {
+  return new Date(dayStartMs + (world.simTime + (hour - world.hour)) * 3600e3);
 }
 
-// zon na aftrek van bewolking
+// Live weer actief (data geladen en gekozen)
+export const isLive = () => world.weatherMode === 'live' && real.ready;
+
+// 0 als de zon onder is, 1 bij hoge zon (30° of meer), volgens SunCalc
+export function sunFactor(hour = world.hour) {
+  const alt = sunAt(dateAt(hour)).altitude;
+  return alt > 0 ? Math.min(1, 2 * Math.sin(alt)) : 0;
+}
+
+// zon na aftrek van bewolking (live: gemeten straling)
 export function sunEff() {
+  if (isLive()) return Math.min(1, world.radiation / 800);
   return sunFactor() * (1 - 0.75 * world.cloud);
 }
 
@@ -96,6 +113,10 @@ function isSleeping(hour = world.hour) {
 }
 
 export function priceAt(hour = world.hour) {
+  if (world.weatherMode === 'live' && real.pricesReady) {
+    const live = samplePrice(dateAt(hour).getTime());
+    if (live !== null) return live;
+  }
   const h = ((hour % 24) + 24) % 24;
   if (h < 6) return 0.18;
   if (h < 7) return 0.25;
@@ -108,6 +129,16 @@ export function priceAt(hour = world.hour) {
 }
 
 // Temperatuur per kamer: woonkamer (oost, radiator, raam 2) en slaapkamer (west, raam 1)
+// Goedkoop/duur: echte prijzen vergelijken met de eigen verdeling (onderste/bovenste kwart); anders vaste grenzen
+export function priceIsCheap(hour = world.hour) {
+  const q = world.weatherMode === 'live' && real.pricesReady ? priceQuantile(0.25) : null;
+  return priceAt(hour) <= (q ?? 0.22);
+}
+export function priceIsPeak(hour = world.hour) {
+  const q = world.weatherMode === 'live' && real.pricesReady ? priceQuantile(0.8) : null;
+  return priceAt(hour) > (q ?? 0.4);
+}
+
 export function roomTemps(h = state) {
   return {
     woonkamer: h.insideTemp + (h.heaterActive ? 0.8 : -0.2) - (h.windowsOpen[1] ? 1.5 : 0),
@@ -122,7 +153,7 @@ function autoControl(h) {
   let target = home ? (isSleeping() ? 17 : 21) : 16;
   if (!home && hour >= 16 && hour < 17.5) target = 21; // voorverwarmen voor thuiskomst
   if (priceAt(hour + 2) >= priceAt(hour) * 1.3) target += 1; // stook vooruit voor de dure piek
-  if (priceAt(hour) > 0.4) target -= 1; // tijdens de piek iets zuiniger
+  if (priceIsPeak(hour)) target -= 1; // tijdens de piek iets zuiniger
   h.targetTemp = target;
   h.heaterOn = true;
 
@@ -162,7 +193,25 @@ function stepWorld(dt) {
   w.simTime += dtH;
   if (w.scenario) w.scenarioHours += dtH;
 
-  if (w.weatherMode === 'auto') {
+  if (isLive()) {
+    const m = sampleWeather(dateAt().getTime());
+    w.radiation = m.rad;
+    // hysterese: wisselen pas ruim over de drempel, zodat het label niet flippert
+    const wasRain = w.weather === 'regen';
+    const wasCloudy = w.weather === 'bewolkt' || wasRain;
+    const rain = m.precip > (wasRain ? 0.05 : 0.15);
+    const cloudy = m.cloud > (wasCloudy ? 0.5 : 0.65);
+    w.weather = rain ? 'regen' : cloudy ? 'bewolkt' : 'zon';
+    w.cloud += (m.cloud - w.cloud) * Math.min(1, dt * 1.5);
+    const windTarget = Math.min(1, Math.max(0, m.wind / 15 + w.windBoost));
+    w.wind += (windTarget - w.wind) * Math.min(1, dt * 1.5);
+    w.baseOutside = Math.round(m.temp);
+    w.outsideTemp = m.temp;
+    return;
+  }
+  w.radiation = 0;
+
+  if (w.weatherMode === 'auto' || w.weatherMode === 'live') {
     w.weatherTimer -= dtH;
     if (w.weatherTimer <= 0) {
       const r = Math.random();
@@ -244,7 +293,7 @@ function stepHouse(h, dt) {
       const surplus = genKw - homeNeedKw;
       const hour = world.hour;
       const needsSoon = hour >= 5 && hour < 8.5 && car.soc < EV_CAPACITY_KWH * 0.8; // klaar voor vertrek
-      charge = priceAt() <= 0.22 || surplus > 1 || car.soc < EV_CAPACITY_KWH * 0.25 || needsSoon;
+      charge = priceIsCheap() || surplus > 1 || car.soc < EV_CAPACITY_KWH * 0.25 || needsSoon;
     } else charge = h.evCharging;
 
     if (charge && capLeft >= EV_CHARGE_KW) {
@@ -329,7 +378,7 @@ export function tip() {
   if (s.autoMode) {
     if (!isHome()) return 'Afwezig: setpoint verlaagd naar 16 °C.';
     if (s.cars.some((c) => c.charging)) return 'Laadpaal actief op goedkope of eigen stroom.';
-    if (priceAt() > 0.4) return 'Piekprijs: setpoint verlaagd.';
+    if (priceIsPeak()) return 'Piekprijs: setpoint verlaagd.';
     return 'Automaatregeling actief.';
   }
   if (open && s.heaterActive && world.outsideTemp < s.insideTemp - 5) return 'Raam open, verwarming in bedrijf.';

@@ -23,8 +23,10 @@ import { createEnvironment } from './src/environment.js';
 import { createCut } from './src/cut.js';
 import { createCameraRig } from './src/camera.js';
 import { createHud } from './src/hud.js';
+import { initRealData, sunAt, onLocationChange } from './src/realdata.js';
+import { createSatellite } from './src/satellite.js';
 import { applyScenario, updateScenario } from './src/scenarios.js';
-import { state, baseline, world, step, comfortScore, sunFactor, sunEff, isHome, batteryPercent, roomTemps } from './src/simulation.js';
+import { state, baseline, world, step, comfortScore, sunFactor, sunEff, dateAt, isHome, batteryPercent, roomTemps } from './src/simulation.js';
 
 // Het 3D-venster is een vast vak in de layout; alles schaalt mee met dat vak
 const view = document.getElementById('view');
@@ -67,16 +69,27 @@ scene.add(sun);
 // Kompas: huis kijkt naar het zuiden (+z), oost is rechts (+x)
 const SUN_RADIUS = 13;
 function sunDirection(hour) {
-  const a = ((hour - 6) / 12) * Math.PI; // 0 = oost, PI/2 = zuid (middag), PI = west
-  return new THREE.Vector3(Math.cos(a), Math.sin(a), 0.6 * Math.sin(a)).normalize();
+  const p = sunAt(dateAt(hour)); // echte zonnestand (SunCalc) voor de gekozen locatie
+  return new THREE.Vector3(p.x, p.y, p.z);
 }
 
 const sunBall = new THREE.Mesh(new THREE.SphereGeometry(0.8, 24, 24), new THREE.MeshBasicMaterial({ color: 0xffdd55 }));
 guides.add(sunBall);
 
-const arcPoints = [];
-for (let h = 6; h <= 18.01; h += 0.25) arcPoints.push(sunDirection(h).multiplyScalar(SUN_RADIUS));
-guides.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(arcPoints), new THREE.LineBasicMaterial({ color: 0xffdd55, transparent: true, opacity: 0.5 })));
+const arc = new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xffdd55, transparent: true, opacity: 0.5 }));
+guides.add(arc);
+// Zonneboog van vandaag (alleen het deel boven de horizon); opnieuw opgebouwd als de locatie bekend is
+function rebuildArc() {
+  const pts = [];
+  for (let h = 0; h <= 24; h += 0.25) {
+    const d = sunDirection(h);
+    if (d.y > 0) pts.push(d.multiplyScalar(SUN_RADIUS));
+  }
+  arc.geometry.setFromPoints(pts);
+}
+rebuildArc();
+onLocationChange(rebuildArc);
+initRealData();
 
 function label(text, x, z) {
   const c = document.createElement('canvas');
@@ -119,7 +132,9 @@ controls.maxDistance = 45;
 controls.enableDamping = true;
 controls.update();
 
-const ui = createUI(camera, renderer.domElement, windows);
+const satellite = createSatellite(env.terrain);
+onLocationChange((loc) => satellite.load(loc.lat, loc.lon));
+const ui = createUI(camera, renderer.domElement, windows, { onSatellite: (on) => satellite.set(on) });
 const weather = createWeather(scene);
 const post = createPost(renderer, scene, camera);
 post.resize(initial.w, initial.h);
