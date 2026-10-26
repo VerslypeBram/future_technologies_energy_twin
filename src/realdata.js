@@ -178,7 +178,17 @@ export function sampleWeather(ms) {
 // Zonnestand als richting in de scène: huis kijkt naar het zuiden (+z), oost is +x.
 // SunCalc 2.x geeft graden: azimut vanaf het noorden (kloksgewijs), hoogte boven de horizon.
 export function sunAt(date) {
-  const pos = SunCalc.getPosition(date, real.location.lat, real.location.lon);
+  return toScene(SunCalc.getPosition(date, real.location.lat, real.location.lon));
+}
+
+// Maanstand (zelfde conventie) plus belichte fractie (0 nieuwe maan, 1 volle maan)
+export function moonAt(date) {
+  const pos = toScene(SunCalc.getMoonPosition(date, real.location.lat, real.location.lon));
+  const { fraction, phase } = SunCalc.getMoonIllumination(date);
+  return { ...pos, fraction, phase };
+}
+
+function toScene(pos) {
   const az = (pos.azimuth * Math.PI) / 180;
   const altitude = (pos.altitude * Math.PI) / 180;
   const c = Math.cos(altitude);

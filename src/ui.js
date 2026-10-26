@@ -48,6 +48,7 @@ export function createUI(camera, canvas, windows, { onSatellite } = {}) {
         <div id="manual">
           ${toggle('Verwarming', 'heater')}
           ${toggle('Ventilatie', 'fan')}
+          ${toggle('Buitenverlichting', 'outdoor')}
           ${toggle('Rolluiken dicht', 'shutters')}
           ${toggle('Auto laden', 'evcharge')}
           <div class="field">
@@ -149,6 +150,7 @@ export function createUI(camera, canvas, windows, { onSatellite } = {}) {
   $('weatherMode').onchange = (e) => (world.weatherMode = e.target.value);
   $('heater').onclick = () => (state.heaterOn = !state.heaterOn);
   $('fan').onclick = () => (state.fanOn = !state.fanOn);
+  $('outdoor').onclick = () => (state.outdoorOn = !state.outdoorOn);
   $('shutters').onclick = () => (state.shuttersClosed = !state.shuttersClosed);
   $('evcharge').onclick = () => (state.evCharging = !state.evCharging);
   $('auto').onclick = () => (state.autoMode = !state.autoMode);
@@ -208,6 +210,7 @@ export function createUI(camera, canvas, windows, { onSatellite } = {}) {
     $('manual').classList.toggle('disabled', state.autoMode);
     setSwitch('heater', state.heaterOn);
     setSwitch('fan', state.fanOn);
+    setSwitch('outdoor', state.outdoorOn);
     setSwitch('shutters', state.shuttersClosed);
     setSwitch('evcharge', state.evCharging);
     text('outLabel', world.baseOutside);

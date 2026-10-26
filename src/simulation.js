@@ -38,6 +38,7 @@ const BASE_LOSS = 0.02; // per seconde, dichte woning
 const WINDOW_LOSS = 0.06; // extra per open raam
 const FAN_LOSS = 0.03;
 const HEATER_POWER_KW = 2;
+export const OUTDOOR_POWER_KW = 0.1; // straat-, gevel- en tuinverlichting samen op vol vermogen
 const HEATER_GAIN = 0.35; // °C per seconde
 const FAN_POWER_KW = 0.1;
 const SOLAR_PEAK_KW = 1.5;
@@ -54,6 +55,8 @@ export function createHouseState({ dumb = false } = {}) {
     targetTemp: 21,
     heaterOn: true,
     fanOn: false,
+    outdoorOn: true, // handbediening: buitenverlichting aan (brandt alleen als het donker is)
+    outdoorKw: 0,
     fanCo2: false, // auto: ventileren op CO2 (met hysterese)
     autoMode: false,
     windowsOpen: [false, false],
@@ -168,6 +171,15 @@ function autoControl(h) {
   h.shuttersClosed = sunFactor() === 0 || (sunEff() > 0.5 && h.insideTemp > 22);
 }
 
+// 0 (uit) .. 1 (vol): brandt als de zon (bijna) onder is; het slimme huis dimt 's nachts
+export function outdoorLevel(h = state) {
+  const dark = 1 - Math.min(1, sunFactor() / 0.3);
+  if (dark <= 0) return 0;
+  if (h.dumb) return dark;
+  if (h.autoMode) return dark * (isSleeping() ? 0.4 : 1);
+  return h.outdoorOn ? dark : 0;
+}
+
 export function comfortScoreFor(h) {
   const ideal = isSleeping() ? 18 : 21;
   const tempPenalty = Math.min(1, Math.abs(h.insideTemp - ideal) / 6);
@@ -274,7 +286,8 @@ function stepHouse(h, dt) {
   const airChange = 0.5 + 2 * openCount + (h.fanOn ? 1.5 : 0);
   h.co2ppm += dtH * ((home ? CO2_SOURCE_PPM_PER_H : 0) - (h.co2ppm - 420) * airChange);
 
-  const homeNeedKw = (h.heaterActive ? HEATER_POWER_KW : 0) + (h.fanOn ? FAN_POWER_KW : 0);
+  h.outdoorKw = outdoorLevel(h) * OUTDOOR_POWER_KW;
+  const homeNeedKw = (h.heaterActive ? HEATER_POWER_KW : 0) + (h.fanOn ? FAN_POWER_KW : 0) + h.outdoorKw;
 
   // Elektrische auto's: vertrekken en komen terug met de bewoners, laden aan de paal
   let evKw = 0;
