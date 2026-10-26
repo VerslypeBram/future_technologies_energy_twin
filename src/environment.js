@@ -149,6 +149,7 @@ export function createEnvironment(scene) {
   const canopyA = std({ color: 0x4a7d3b, roughness: 0.95, flatShading: true });
   const canopyB = std({ color: 0x3b6a33, roughness: 0.95, flatShading: true });
   const blobs = [blobGeometry(1, 3), blobGeometry(1, 7), blobGeometry(1, 11)];
+  const treeBlobs = []; // { mesh, base } voor seizoenen: bladeren groeien en vallen
   function tree(x, z, s, seed) {
     const rand = rng(seed);
     const g = new THREE.Group();
@@ -164,6 +165,7 @@ export function createEnvironment(scene) {
       blob.rotation.y = rand() * 6;
       blob.castShadow = true;
       g.add(blob);
+      treeBlobs.push({ mesh: blob, base: r });
     }
     g.position.set(x, 0, z);
     decor.add(g);
@@ -214,7 +216,8 @@ export function createEnvironment(scene) {
 
   // Grasspollen verspreid over de kavel
   const tuftCount = 900;
-  const tufts = new THREE.InstancedMesh(new THREE.ConeGeometry(0.025, 0.28, 3), std({ roughness: 1 }), tuftCount);
+  const tuftMat = std({ roughness: 1 });
+  const tufts = new THREE.InstancedMesh(new THREE.ConeGeometry(0.025, 0.28, 3), tuftMat, tuftCount);
   const rt = rng(300);
   let placed = 0;
   while (placed < tuftCount) {
@@ -276,6 +279,7 @@ export function createEnvironment(scene) {
     yard,
     terrain,
     decor,
+    foliage: { canopyA, canopyB, hedgeMat, tuftMat, treeBlobs },
     // Warmtecamera: alleen de grond blijft, alle versiering verdwijnt
     setThermal(on) {
       decor.visible = !on;

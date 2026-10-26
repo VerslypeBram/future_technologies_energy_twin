@@ -481,6 +481,8 @@ export function createHouse() {
     heaterMaterial,
     indoorLight,
     panelMaterial,
+    roofs: [roofSouth, roofNorth],
+    solarGroup,
     shutters,
     batteryFill,
     resident,

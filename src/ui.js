@@ -13,6 +13,7 @@ import {
   costEuro,
   co2Kg,
   priceAt,
+  copAt,
   priceIsCheap,
   priceIsPeak,
   REALTIME,
@@ -61,6 +62,17 @@ export function createUI(camera, canvas, windows, { onSatellite } = {}) {
     </details>
 
     <details>
+      <summary>Installaties</summary>
+      <div class="sec-body">
+        ${toggle('Warmtepomp', 'heatpump')}
+        ${toggle('Extra batterij (+5 kWh)', 'battery2')}
+        ${kv('COP verwarming', 'cop')}
+        ${kv('Regenton', 'tank', 'L')}
+        <div class="note">Warmtepomp: rendement stijgt bij zacht weer. De regenton vult met dakwater en de pomp sproeit de tuin op warme, droge avonden en ochtenden.</div>
+      </div>
+    </details>
+
+    <details>
       <summary>Omgeving</summary>
       <div class="sec-body">
         <div class="field" style="margin-top:0">
@@ -92,6 +104,8 @@ export function createUI(camera, canvas, windows, { onSatellite } = {}) {
         <div class="note">Weer: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (CC BY 4.0). Prijs: <a href="https://www.energy-charts.info/" target="_blank" rel="noopener">Energy-Charts</a> (CC BY 4.0, Bundesnetzagentur | SMARD.de), schatting incl. nettarief en taksen. Zonnestand: <a href="https://github.com/mourner/suncalc" target="_blank" rel="noopener">SunCalc</a>.</div>
         <div style="margin-top:8px">
           ${kv('Weer nu', 'weatherNow')}
+          ${kv('Sneeuwlaag', 'snowCover', '%')}
+          ${kv('Sneeuw op panelen', 'panelSnow', '%')}
           ${kv('Wind', 'wind', 'm/s')}
           ${kv('Buiten nu', 'outNow', '°C')}
           ${kv('Stroomprijs', 'price', '€/kWh')}
@@ -151,6 +165,8 @@ export function createUI(camera, canvas, windows, { onSatellite } = {}) {
   $('heater').onclick = () => (state.heaterOn = !state.heaterOn);
   $('fan').onclick = () => (state.fanOn = !state.fanOn);
   $('outdoor').onclick = () => (state.outdoorOn = !state.outdoorOn);
+  $('heatpump').onclick = () => (state.heatPump = !state.heatPump);
+  $('battery2').onclick = () => (state.extraBattery = !state.extraBattery);
   $('shutters').onclick = () => (state.shuttersClosed = !state.shuttersClosed);
   $('evcharge').onclick = () => (state.evCharging = !state.evCharging);
   $('auto').onclick = () => (state.autoMode = !state.autoMode);
@@ -211,6 +227,12 @@ export function createUI(camera, canvas, windows, { onSatellite } = {}) {
     setSwitch('heater', state.heaterOn);
     setSwitch('fan', state.fanOn);
     setSwitch('outdoor', state.outdoorOn);
+    setSwitch('heatpump', state.heatPump);
+    setSwitch('battery2', state.extraBattery);
+    text('cop', fmt(copAt(world.outsideTemp, state.heatPump), 1));
+    text('tank', fmt(state.tankL, 0));
+    text('snowCover', fmt(world.snow * 100, 0));
+    text('panelSnow', fmt(world.panelSnow * 100, 0));
     setSwitch('shutters', state.shuttersClosed);
     setSwitch('evcharge', state.evCharging);
     text('outLabel', world.baseOutside);

@@ -23,6 +23,10 @@ export const world = {
   scenario: null,
   scenarioHours: 0, // gesimuleerde uren sinds het scenario begon
   radiation: 0, // W/m² (live)
+  precip: 0, // neerslag in mm/u
+  snowing: false,
+  snow: 0, // sneeuwlaag op de grond en het dak, 0..1
+  panelSnow: 0, // sneeuw op de zonnepanelen, 0..1 (smelt sneller in de zon)
   simTime: startHour, // totaal gesimuleerde uren (voor de tijdlijn)
   paused: false,
 };
@@ -44,7 +48,12 @@ const FAN_POWER_KW = 0.1;
 const SOLAR_PEAK_KW = 1.5;
 const SOLAR_HEAT = 0.05; // °C per seconde bij volle zon door de ramen
 const BATTERY_CAPACITY_KWH = 5;
+const EXTRA_BATTERY_KWH = 5; // extra batterij naast de eerste
 const BATTERY_MAX_KW = 2;
+const ROOF_M2 = 25; // dakoppervlak dat regenwater opvangt
+const TANK_CAPACITY_L = 300;
+const PUMP_KW = 0.06; // regenwaterpomp tijdens het tuin sproeien
+const WATER_L_PER_H = 60;
 const CO2_PER_KWH = 0.25; // kg
 const CO2_SOURCE_PPM_PER_H = 400; // bewoners ademen CO2 uit
 
@@ -55,6 +64,11 @@ export function createHouseState({ dumb = false } = {}) {
     targetTemp: 21,
     heaterOn: true,
     fanOn: false,
+    heatPump: !dumb, // warmtepomp (COP volgt de buitentemperatuur); het referentiehuis stookt elektrisch
+    extraBattery: false,
+    tankL: 0, // regenton (liter)
+    pumpKw: 0,
+    heaterKw: 0,
     outdoorOn: true, // handbediening: buitenverlichting aan (brandt alleen als het donker is)
     outdoorKw: 0,
     fanCo2: false, // auto: ventileren op CO2 (met hysterese)
@@ -171,6 +185,14 @@ function autoControl(h) {
   h.shuttersClosed = sunFactor() === 0 || (sunEff() > 0.5 && h.insideTemp > 22);
 }
 
+// Rendement van de warmtepomp: beter bij zacht weer (COP 1 = gewone elektrische verwarming)
+export function copAt(temp, heatPump = true) {
+  if (!heatPump) return 1;
+  return Math.min(4.5, Math.max(1.8, 3 + 0.1 * temp));
+}
+export const batteryCapacity = (h = state) => BATTERY_CAPACITY_KWH + (h.extraBattery ? EXTRA_BATTERY_KWH : 0);
+const batteryMaxKw = (h) => BATTERY_MAX_KW * (h.extraBattery ? 1.5 : 1);
+
 // 0 (uit) .. 1 (vol): brandt als de zon (bijna) onder is; het slimme huis dimt 's nachts
 export function outdoorLevel(h = state) {
   const dark = 1 - Math.min(1, sunFactor() / 0.3);
@@ -219,6 +241,9 @@ function stepWorld(dt) {
     w.wind += (windTarget - w.wind) * Math.min(1, dt * 1.5);
     w.baseOutside = Math.round(m.temp);
     w.outsideTemp = m.temp;
+    w.precip = m.precip;
+    w.snowing = m.precip > 0.1 && m.temp < 1.5;
+    stepSnow(w, dtH);
     return;
   }
   w.radiation = 0;
@@ -238,6 +263,21 @@ function stepWorld(dt) {
   const windTarget = WIND_BASE[w.weather] + 0.2 * Math.sin(w.hour * 1.7) * Math.cos(w.hour * 0.6) + w.windBoost;
   w.wind += (Math.min(1, Math.max(0, windTarget)) - w.wind) * Math.min(1, dt * 1.5);
   w.outsideTemp = w.baseOutside + 4 * Math.sin(((w.hour - 9) / 24) * 2 * Math.PI) - 2 * w.cloud;
+  w.precip = w.weather === 'regen' ? 3 : 0;
+  w.snowing = w.weather !== 'zon' && w.outsideTemp < 0.5 && w.cloud > 0.5;
+  stepSnow(w, dtH);
+}
+
+// Sneeuw hoopt zich op bij vorst en neerslag en smelt bij dooi; op de panelen sneller, vooral in de zon
+function stepSnow(w, dtH) {
+  if (w.snowing) {
+    w.snow = Math.min(1, w.snow + 0.35 * dtH);
+    w.panelSnow = Math.min(w.snow, w.panelSnow + 0.5 * dtH);
+  } else {
+    const melt = Math.max(0, w.outsideTemp - 0.5) * 0.03 + (w.outsideTemp > -8 ? 0.01 : 0);
+    w.snow = Math.max(0, w.snow - melt * dtH);
+    w.panelSnow = Math.max(0, Math.min(w.snow, w.panelSnow - (melt + 0.04 + 0.5 * sunEff()) * dtH));
+  }
 }
 
 function stepHouse(h, dt) {
@@ -254,10 +294,10 @@ function stepHouse(h, dt) {
   // Opwek en beschikbaar vermogen (bij stroomstoring: alleen opwek + batterij)
   const dtH = dt * world.hoursPerSec;
   const dtSafe = Math.max(dtH, 1 / 3600);
-  h.solarKw = h.dumb ? 0 : sunEff() * SOLAR_PEAK_KW;
+  h.solarKw = h.dumb ? 0 : sunEff() * SOLAR_PEAK_KW * (1 - 0.9 * world.panelSnow);
   h.windKw = h.dumb ? 0 : world.wind * WIND_PEAK_KW;
   const genKw = h.solarKw + h.windKw;
-  const batteryAvailKw = h.dumb ? 0 : Math.min(BATTERY_MAX_KW, h.battery / dtSafe);
+  const batteryAvailKw = h.dumb ? 0 : Math.min(batteryMaxKw(h), h.battery / dtSafe);
   let capLeft = world.gridOnline ? Infinity : genKw + batteryAvailKw;
 
   const openCount = h.windowsOpen.filter(Boolean).length;
@@ -272,8 +312,10 @@ function stepHouse(h, dt) {
   } else {
     h.heaterActive = false;
   }
-  if (h.heaterActive && capLeft < HEATER_POWER_KW) h.heaterActive = false; // stroomstoring
-  if (h.heaterActive) capLeft -= HEATER_POWER_KW;
+  const heaterKw = HEATER_POWER_KW / copAt(world.outsideTemp, h.heatPump);
+  if (h.heaterActive && capLeft < heaterKw) h.heaterActive = false; // stroomstoring
+  if (h.heaterActive) capLeft -= heaterKw;
+  h.heaterKw = h.heaterActive ? heaterKw : 0;
 
   let dT = (world.outsideTemp - h.insideTemp) * loss * dt;
   if (h.heaterActive) dT += HEATER_GAIN * dt;
@@ -287,7 +329,18 @@ function stepHouse(h, dt) {
   h.co2ppm += dtH * ((home ? CO2_SOURCE_PPM_PER_H : 0) - (h.co2ppm - 420) * airChange);
 
   h.outdoorKw = outdoorLevel(h) * OUTDOOR_POWER_KW;
-  const homeNeedKw = (h.heaterActive ? HEATER_POWER_KW : 0) + (h.fanOn ? FAN_POWER_KW : 0) + h.outdoorKw;
+
+  // Regenton: vult met dakwater, de pomp sproeit de tuin op droge, warme avonden en ochtenden
+  h.pumpKw = 0;
+  if (!h.dumb) {
+    h.tankL = Math.min(TANK_CAPACITY_L, h.tankL + world.precip * ROOF_M2 * dtH);
+    const wateringTime = (world.hour >= 19 && world.hour < 21) || (world.hour >= 6 && world.hour < 8);
+    if (wateringTime && world.precip === 0 && world.outsideTemp > 16 && h.tankL > 0) {
+      h.pumpKw = PUMP_KW;
+      h.tankL = Math.max(0, h.tankL - WATER_L_PER_H * dtH);
+    }
+  }
+  const homeNeedKw = h.heaterKw + (h.fanOn ? FAN_POWER_KW : 0) + h.outdoorKw + h.pumpKw;
 
   // Elektrische auto's: vertrekken en komen terug met de bewoners, laden aan de paal
   let evKw = 0;
@@ -325,14 +378,14 @@ function stepHouse(h, dt) {
   if (genKw >= needKw) {
     const surplus = genKw - needKw;
     if (!h.dumb) {
-      const room = (BATTERY_CAPACITY_KWH - h.battery) / dtSafe;
-      batteryKw = Math.min(surplus, BATTERY_MAX_KW, room);
+      const room = Math.max(0, batteryCapacity(h) - h.battery) / dtSafe;
+      batteryKw = Math.min(surplus, batteryMaxKw(h), room);
       if (dtH > 0) h.battery += batteryKw * dtH;
     }
   } else {
     const deficit = needKw - genKw;
     let discharge = 0;
-    if (!h.dumb) discharge = Math.min(deficit, BATTERY_MAX_KW, h.battery / dtSafe);
+    if (!h.dumb) discharge = Math.min(deficit, batteryMaxKw(h), h.battery / dtSafe);
     if (dtH > 0) h.battery -= discharge * dtH;
     batteryKw = -discharge;
     gridKw = world.gridOnline ? deficit - discharge : 0;
@@ -378,8 +431,9 @@ export function restore(s) {
   Object.assign(baseline, clone(s.baseline));
 }
 
+export const tankPercent = (h = state) => (h.tankL / TANK_CAPACITY_L) * 100;
 export const evPercent = (h, i) => (h.cars[i].soc / EV_CAPACITY_KWH) * 100;
-export const batteryPercent = (h = state) => (h.battery / BATTERY_CAPACITY_KWH) * 100;
+export const batteryPercent = (h = state) => (h.battery / batteryCapacity(h)) * 100;
 export const netKwh = (h = state) => h.gridKwh;
 export const costEuro = (h = state) => h.cost;
 export const co2Kg = (h = state) => h.gridKwh * CO2_PER_KWH;

@@ -23,12 +23,16 @@ import { createEnvironment } from './src/environment.js';
 import { createCut } from './src/cut.js';
 import { createCameraRig } from './src/camera.js';
 import { createHud } from './src/hud.js';
-import { initRealData, sunAt, onLocationChange } from './src/realdata.js';
+import { real, initRealData, sunAt, onLocationChange } from './src/realdata.js';
 import { createSatellite } from './src/satellite.js';
 import { createMoon } from './src/moon.js';
 import { createOutdoor } from './src/outdoor.js';
+import { createSeasons } from './src/seasons.js';
+import { createSnow } from './src/snow.js';
+import { createLife } from './src/life.js';
+import { createExtras } from './src/extras.js';
 import { applyScenario, updateScenario } from './src/scenarios.js';
-import { state, baseline, world, step, comfortScore, sunFactor, sunEff, dateAt, outdoorLevel, isHome, batteryPercent, roomTemps } from './src/simulation.js';
+import { state, baseline, world, step, comfortScore, sunFactor, sunEff, dateAt, outdoorLevel, isHome, batteryPercent, batteryCapacity, tankPercent, roomTemps } from './src/simulation.js';
 
 // Het 3D-venster is een vast vak in de layout; alles schaalt mee met dat vak
 const view = document.getElementById('view');
@@ -116,7 +120,7 @@ label('W', -8.5, 0);
 const env = createEnvironment(scene);
 
 // House
-const { house, windows, fan, heaterMaterial, indoorLight, panelMaterial, shutters, batteryFill, resident, residentParts, rotors, cars, chargerMaterials, floorMaterials, inspectables } = createHouse();
+const { house, windows, fan, heaterMaterial, indoorLight, panelMaterial, roofs, solarGroup, shutters, batteryFill, resident, residentParts, rotors, cars, chargerMaterials, floorMaterials, inspectables } = createHouse();
 scene.add(house);
 house.traverse((o) => {
   if (!o.isMesh) return;
@@ -151,6 +155,10 @@ const history = createHistory();
 const thermal = createThermal(house, [env.yard, env.terrain]);
 const cut = createCut(renderer, house);
 const rig = createCameraRig(camera, controls, cars);
+const seasons = createSeasons(env);
+const snow = createSnow({ yard: env.yard, terrain: env.terrain, roofs, solarGroup, house, scene, clippingPlanes: cut.planes });
+const life = createLife(scene);
+const extras = createExtras(scene);
 
 let quality = 'high';
 let cutValue = 0;
@@ -165,6 +173,9 @@ const hud = createHud({
       skyBox.setVisible(!on);
       moon.setVisible(!on);
       outdoor.setVisible(!on);
+      snow.setVisible(!on);
+      life.setVisible(!on);
+      extras.setVisible(!on);
       scene.background = on ? new THREE.Color(0x05060a) : null;
       post.setBloom(!on);
       cut.set(on ? 0 : cutValue);
@@ -253,6 +264,19 @@ function animate() {
   skyBox.update(sunDir, sunUp, world.cloud);
   moon.update(dateAt(), sunUp, world.cloud);
   outdoor.update(outdoorLevel(state));
+
+  // Seizoen, sneeuw, leven en extra installaties
+  seasons.update(dateAt(), real.location.lat, satellite.on);
+  snow.update(world.snow, world.panelSnow);
+  life.update(dt, { sunUp, weather: world.weather, snowing: world.snowing, hour: world.hour });
+  extras.update(dt, {
+    heatPumpOn: state.heatPump,
+    heating: state.heaterActive,
+    extraBattery: state.extraBattery,
+    batteryFraction: batteryPercent() / 100,
+    tankFraction: tankPercent() / 100,
+    pumping: state.pumpKw > 0,
+  });
 
   // Zonnepanelen gloeien licht bij opbrengst
   panelMaterial.emissiveIntensity = sunPower * 0.6;

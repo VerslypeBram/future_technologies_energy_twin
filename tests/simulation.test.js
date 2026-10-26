@@ -8,7 +8,7 @@ stubFetch(startMs);
 
 const sim = await import('../src/simulation.js');
 const rd = await import('../src/realdata.js');
-const { world, state, baseline, step, priceAt, priceIsCheap, priceIsPeak, sunFactor, outdoorLevel, OUTDOOR_POWER_KW } = sim;
+const { world, state, baseline, step, priceAt, priceIsCheap, priceIsPeak, sunFactor, outdoorLevel, OUTDOOR_POWER_KW, copAt, batteryCapacity, batteryPercent } = sim;
 
 function setHour(h) {
   world.simTime = Math.floor(world.simTime / 24) * 24 + h;
@@ -137,5 +137,87 @@ describe('buitenverlichting', () => {
     expect(state.outdoorKw).toBeCloseTo(OUTDOOR_POWER_KW, 6);
     expect(state.flows.home).toBeGreaterThanOrEqual(OUTDOOR_POWER_KW - 1e-9);
     state.heaterOn = true;
+  });
+});
+
+describe('warmtepomp', () => {
+  it('heeft een rendement dat met de buitentemperatuur meegroeit en begrensd is', () => {
+    expect(copAt(-10)).toBeCloseTo(2.0, 6);
+    expect(copAt(5)).toBeCloseTo(3.5, 6);
+    expect(copAt(40)).toBe(4.5);
+    expect(copAt(-40)).toBe(1.8);
+    expect(copAt(5, false)).toBe(1); // elektrische verwarming
+  });
+
+  it('verbruikt minder stroom dan elektrisch verwarmen bij dezelfde warmte', () => {
+    state.heatPump = true;
+    state.insideTemp = baseline.insideTemp = 14;
+    state.heaterOn = baseline.heaterOn = true;
+    setHour(13);
+    step(0.01);
+    expect(state.heaterActive).toBe(true);
+    expect(baseline.heaterActive).toBe(true);
+    expect(state.heaterKw).toBeLessThan(baseline.heaterKw);
+    expect(baseline.heaterKw).toBeCloseTo(2, 6);
+  });
+});
+
+describe('extra batterij', () => {
+  it('verdubbelt de capaciteit en halveert het percentage bij gelijke lading', () => {
+    state.extraBattery = false;
+    state.battery = 2.5;
+    expect(batteryCapacity(state)).toBe(5);
+    expect(batteryPercent(state)).toBeCloseTo(50, 6);
+    state.extraBattery = true;
+    expect(batteryCapacity(state)).toBe(10);
+    expect(batteryPercent(state)).toBeCloseTo(25, 6);
+    state.extraBattery = false;
+  });
+});
+
+describe('sneeuw', () => {
+  it('hoopt zich op bij vorst en bewolking en smelt bij dooi', () => {
+    world.snow = 0;
+    world.panelSnow = 0;
+    world.weatherMode = 'bewolkt';
+    world.baseOutside = -8;
+    for (let i = 0; i < 8; i++) step(1);
+    expect(world.snowing).toBe(true);
+    expect(world.snow).toBeGreaterThan(0.5);
+    expect(world.panelSnow).toBeGreaterThan(0);
+
+    world.weatherMode = 'zon';
+    world.baseOutside = 20;
+    for (let i = 0; i < 40; i++) step(1);
+    expect(world.snowing).toBe(false);
+    expect(world.snow).toBe(0);
+    expect(world.panelSnow).toBe(0);
+    world.baseOutside = 5;
+  });
+
+  it('sneeuw op de panelen kost bijna alle zonne-opbrengst', () => {
+    setHour(13);
+    world.baseOutside = -10;
+    world.snow = world.panelSnow = 0;
+    step(0.001);
+    const clear = state.solarKw;
+    world.snow = world.panelSnow = 1;
+    step(0.001);
+    expect(clear).toBeGreaterThan(0);
+    expect(state.solarKw / clear).toBeCloseTo(0.1, 1);
+    world.snow = world.panelSnow = 0;
+    world.baseOutside = 5;
+  });
+});
+
+describe('regenton', () => {
+  it('vult met dakwater bij regen, alleen in het slimme huis', () => {
+    state.tankL = baseline.tankL = 0;
+    world.weatherMode = 'regen';
+    world.baseOutside = 10;
+    for (let i = 0; i < 4; i++) step(1);
+    expect(state.tankL).toBeGreaterThan(40);
+    expect(state.tankL).toBeLessThanOrEqual(300);
+    expect(baseline.tankL).toBe(0);
   });
 });
