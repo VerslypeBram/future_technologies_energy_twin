@@ -48,7 +48,8 @@ Energy-Charts staat geen aanroepen vanuit andere origins toe (CORS). Daarom gaan
 
 ## Gebruik
 
-- **Omgeving**: weer (live of mock), locatie via de minikaart, satelliet-ondergrond, simulatiesnelheid, "Naar echte tijd".
+- **Omgeving**: weer (live of mock), locatie via de minikaart, satelliet-ondergrond, simulatiesnelheid ("Realtime" of "Dag in 24 s"), "Naar echte tijd".
+- **Zon volgen**: de knop "Volg zon" onderaan houdt de camera op de zon gericht; met "Dag in 24 s" trekt hij in 24 seconden over de lucht en schuiven de schaduwen mee.
 - **Installaties**: warmtepomp (rendement volgt de buitentemperatuur), extra batterij (+5 kWh) en een regenton met pomp.
 - **Seizoenen en weer**: bladeren kleuren, vallen en groeien volgens de echte datum; sneeuw blijft liggen bij vorst, smelt bij dooi en bedekt de zonnepanelen (minder opbrengst).
 - **Leven**: auto's op de straat, een voetganger op de stoep en vogels overdag.
