@@ -176,9 +176,11 @@ export function sampleWeather(ms) {
 }
 
 // Zonnestand als richting in de scène: huis kijkt naar het zuiden (+z), oost is +x.
-// SunCalc: azimut in rad vanaf het zuiden, positief naar het westen.
+// SunCalc 2.x geeft graden: azimut vanaf het noorden (kloksgewijs), hoogte boven de horizon.
 export function sunAt(date) {
-  const { azimuth, altitude } = SunCalc.getPosition(date, real.location.lat, real.location.lon);
+  const pos = SunCalc.getPosition(date, real.location.lat, real.location.lon);
+  const az = (pos.azimuth * Math.PI) / 180;
+  const altitude = (pos.altitude * Math.PI) / 180;
   const c = Math.cos(altitude);
-  return { x: -Math.sin(azimuth) * c, y: Math.sin(altitude), z: Math.cos(azimuth) * c, altitude };
+  return { x: Math.sin(az) * c, y: Math.sin(altitude), z: -Math.cos(az) * c, altitude };
 }

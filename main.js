@@ -197,7 +197,7 @@ const WALK_PATH = [new THREE.Vector3(0, 0, 2.6), new THREE.Vector3(0, 0, 5.2), n
 const heading = new THREE.Vector3();
 const nightTint = new THREE.Color(0x7f98c8);
 const dayTint = new THREE.Color(0xffffff);
-const clock = new THREE.Clock();
+const timer = new THREE.Timer();
 
 // Kleur van de kamervloer volgt de temperatuur (blauw, groen, rood)
 const floorCold = new THREE.Color(0x4a78c2);
@@ -209,7 +209,8 @@ function tempColor(target, t) {
 }
 
 function animate() {
-  const dt = Math.min(clock.getDelta(), 0.1);
+  timer.update();
+  const dt = Math.min(timer.getDelta(), 0.1);
   step(dt);
 
   // Ramen open/dicht animeren
