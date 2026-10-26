@@ -1,13 +1,18 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="nl">
   <head>
     <meta charset="utf-8">
-    <title>My first three.js app</title>
-    <style>
-      body { margin: 0; }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Woning EMS</title>
   </head>
   <body>
+    <div id="app">
+      <header id="topbar"></header>
+      <aside id="sidebar" aria-label="Bediening en meetwaarden"></aside>
+      <main id="view"></main>
+      <aside id="aside" aria-label="Grafieken en meldingen"></aside>
+      <footer id="bottombar"></footer>
+    </div>
     <script type="module" src="/main.js"></script>
   </body>
 </html>
