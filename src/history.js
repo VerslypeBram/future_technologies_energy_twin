@@ -24,6 +24,10 @@ export function createHistory() {
     },
     update() {
       if (scrubIndex !== null || world.paused) return;
+      // klok teruggezet (bijv. 'Naar echte tijd'): momentopnames uit de toekomst vervallen
+      while (entries.length && entries[entries.length - 1].t > world.simTime) entries.pop();
+      if (entries.length) lastT = entries[entries.length - 1].t;
+      else lastT = -Infinity;
       if (world.simTime - lastT >= STEP_HOURS) {
         entries.push({ t: world.simTime, snap: snapshot() });
         lastT = world.simTime;

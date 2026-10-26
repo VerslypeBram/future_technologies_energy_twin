@@ -1,4 +1,4 @@
-import { state, world, priceAt, batteryPercent, isHome } from './simulation.js';
+import { state, world, priceIsPeak, batteryPercent, isHome } from './simulation.js';
 
 const COOLDOWN_HOURS = 2; // gesimuleerde uren tussen herhalingen
 
@@ -12,7 +12,7 @@ const RULES = [
   {
     id: 'batteryLow',
     level: 'warn',
-    test: () => batteryPercent() < 10 && priceAt() > 0.4,
+    test: () => batteryPercent() < 10 && priceIsPeak(),
     text: 'Batterij SoC onder 10 % tijdens piekprijs.',
   },
   {
