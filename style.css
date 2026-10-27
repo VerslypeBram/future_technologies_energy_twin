@@ -142,6 +142,11 @@ button, select, input { font: inherit; color: inherit; }
 }
 .btn:hover { background: var(--panel-2); }
 .btn[hidden] { display: none; }
+.btn[aria-pressed='true'] { background: var(--accent); border-color: var(--accent); color: #0d1114; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.voice-form { display: flex; gap: 6px; margin-top: 8px; }
+.voice-form input { flex: 1; min-width: 0; padding: 5px 6px; border: 1px solid var(--line-2); border-radius: 2px; background: var(--bg); }
+.voice-buttons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 select {
   width: 100%;
   padding: 5px 6px;
