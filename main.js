@@ -32,6 +32,7 @@ import { createSeasons } from './src/seasons.js';
 import { createSnow } from './src/snow.js';
 import { createLife } from './src/life.js';
 import { createExtras } from './src/extras.js';
+import { createVoice } from './src/voice.js';
 import { applyScenario, updateScenario } from './src/scenarios.js';
 import { state, baseline, world, step, comfortScore, sunFactor, sunEff, dateAt, outdoorLevel, isHome, batteryPercent, batteryCapacity, tankPercent, roomTemps } from './src/simulation.js';
 
@@ -207,6 +208,22 @@ const hud = createHud({
       outdoor.setLights(q === 'high');
     },
   },
+});
+createVoice({
+  actions: {
+    followSun: (on) => rig.followSun(on, () => sunDirection(world.hour)),
+    flyTo: (name) => rig.flyTo(name),
+    setScenario: (name) => {
+      applyScenario(name);
+      alerts.reset();
+    },
+    // schakelaars in het paneel (Weergave) bedienen via hun knop, zodat knop en scène gelijk blijven
+    setLayer: (name, on) => {
+      const btn = document.querySelector(name === 'thermal' ? '#irBtn' : `[data-layer="${name}"]`);
+      if (btn && (btn.getAttribute('aria-checked') === 'true') !== on) btn.click();
+    },
+  },
+  toast: hud.toast,
 });
 const alerts = createAlerts(hud.toast);
 const chart = createChart();
