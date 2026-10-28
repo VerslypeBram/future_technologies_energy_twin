@@ -69,10 +69,18 @@ export function createExtras(scene) {
   barrel.position.set(2.55, 0.5, -1.6);
   group.add(barrel);
 
+  const inspectables = [
+    { id: 'heatpump', label: 'Warmtepomp', objects: [heatPump] },
+    { id: 'battery2', label: 'Extra batterij', objects: [battery2] },
+    { id: 'barrel', label: 'Regenton', objects: [barrel] },
+  ];
+  inspectables.forEach(({ id, objects }) => objects.forEach((root) => root.traverse((m) => m.isMesh && (m.userData.inspectId = id))));
+
   let shown = true;
 
   return {
     group,
+    inspectables,
     update(dt, { heatPumpOn, heating, extraBattery, batteryFraction, tankFraction, pumping }) {
       heatPump.visible = shown && heatPumpOn;
       battery2.visible = shown && extraBattery;
