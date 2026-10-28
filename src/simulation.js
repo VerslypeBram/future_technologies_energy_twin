@@ -50,6 +50,8 @@ const SOLAR_HEAT = 0.05; // °C per seconde bij volle zon door de ramen
 const BATTERY_CAPACITY_KWH = 5;
 const EXTRA_BATTERY_KWH = 5; // extra batterij naast de eerste
 const BATTERY_MAX_KW = 2;
+const BATTERY_RESERVE = 0.2; // aandeel dat de automaat bewaart voor een stroomstoring
+const GRID_CHARGE_MAX_SUN = 0.2; // bijladen van het net alleen als er weinig zon is
 const ROOF_M2 = 25; // dakoppervlak dat regenwater opvangt
 const TANK_CAPACITY_L = 300;
 const PUMP_KW = 0.06; // regenwaterpomp tijdens het tuin sproeien
@@ -90,11 +92,13 @@ export function createHouseState({ dumb = false } = {}) {
     energyKwh: 0, // totaal verbruik
     solarKwh: 0, // totale opbrengst
     gridKwh: 0, // afname van het net
-    cost: 0, // euro
+    cost: 0, // euro, netto (afname min teruglevering)
+    exportKwh: 0, // teruggeleverd aan het net
+    revenue: 0, // euro opbrengst teruglevering
     comfortSum: 0,
     comfortTime: 0,
     // Stromen in kW voor visualisaties (batteryKw: + laden, - ontladen)
-    flows: { solar: 0, wind: 0, batteryKw: 0, grid: 0, home: 0, ev: 0 },
+    flows: { solar: 0, wind: 0, batteryKw: 0, grid: 0, home: 0, ev: 0, export: 0 },
   };
 }
 
@@ -143,6 +147,11 @@ export function priceAt(hour = world.hour) {
   if (h < 17) return 0.25;
   if (h < 21) return 0.45;
   return 0.22;
+}
+
+// Terugleververgoeding: de afnameprijs min nettarief, taksen en btw, dus ongeveer de spotprijs (nooit negatief)
+export function feedInPrice(hour = world.hour) {
+  return Math.max(0, priceAt(hour) / 1.06 - 0.12);
 }
 
 // Temperatuur per kamer: woonkamer (oost, radiator, raam 2) en slaapkamer (west, raam 1)
@@ -374,29 +383,45 @@ function stepHouse(h, dt) {
 
   let gridKw = 0;
   let batteryKw = 0;
+  let exportKw = 0;
+
+  // Slim batterijbeheer (automaat): goedkope nacht-/daluren bijladen van het net en dan niet ontladen;
+  // anders een reserve bewaren voor een stroomstoring, behalve tijdens de piekprijs.
+  const smart = !h.dumb && h.autoMode && world.gridOnline;
+  const gridCharge = smart && priceIsCheap() && sunEff() < GRID_CHARGE_MAX_SUN;
+  const reserveKwh = smart && !priceIsPeak() ? BATTERY_RESERVE * batteryCapacity(h) : 0;
+  const room = h.dumb ? 0 : Math.max(0, batteryCapacity(h) - h.battery) / dtSafe;
 
   if (genKw >= needKw) {
     const surplus = genKw - needKw;
-    if (!h.dumb) {
-      const room = Math.max(0, batteryCapacity(h) - h.battery) / dtSafe;
-      batteryKw = Math.min(surplus, batteryMaxKw(h), room);
-      if (dtH > 0) h.battery += batteryKw * dtH;
-    }
+    if (!h.dumb) batteryKw = Math.min(surplus, batteryMaxKw(h), room);
+    exportKw = world.gridOnline ? surplus - batteryKw : 0; // bij een storing kan het overschot niet naar het net
   } else {
     const deficit = needKw - genKw;
     let discharge = 0;
-    if (!h.dumb) discharge = Math.min(deficit, batteryMaxKw(h), h.battery / dtSafe);
-    if (dtH > 0) h.battery -= discharge * dtH;
+    if (!h.dumb && !gridCharge) {
+      discharge = Math.min(deficit, batteryMaxKw(h), Math.max(0, h.battery - reserveKwh) / dtSafe);
+    }
     batteryKw = -discharge;
     gridKw = world.gridOnline ? deficit - discharge : 0;
   }
-  h.flows = { solar: h.solarKw, wind: h.windKw, batteryKw, grid: gridKw, home: homeNeedKw, ev: evKw };
+  if (gridCharge) {
+    const extra = Math.min(batteryMaxKw(h) - batteryKw, room - batteryKw);
+    if (extra > 0) {
+      batteryKw += extra;
+      gridKw += extra;
+    }
+  }
+  if (dtH > 0) h.battery = Math.min(batteryCapacity(h), Math.max(0, h.battery + batteryKw * dtH));
+  h.flows = { solar: h.solarKw, wind: h.windKw, batteryKw, grid: gridKw, home: homeNeedKw, ev: evKw, export: exportKw };
 
   h.energyKwh += needKw * dtH;
   h.solarKwh += h.solarKw * dtH;
   h.windKwh += h.windKw * dtH;
   h.gridKwh += gridKw * dtH;
-  h.cost += gridKw * dtH * priceAt();
+  h.exportKwh += exportKw * dtH;
+  h.revenue += exportKw * dtH * feedInPrice();
+  h.cost += gridKw * dtH * priceAt() - exportKw * dtH * feedInPrice(); // netto: afname min teruglevering
 
   if (home) {
     h.comfortSum += comfortScoreFor(h) * dt;
@@ -413,7 +438,7 @@ export function step(dt) {
 
 export function resetDay() {
   [state, baseline].forEach((h) => {
-    h.energyKwh = h.solarKwh = h.windKwh = h.gridKwh = h.cost = h.comfortSum = h.comfortTime = 0;
+    h.energyKwh = h.solarKwh = h.windKwh = h.gridKwh = h.exportKwh = h.revenue = h.cost = h.comfortSum = h.comfortTime = 0;
   });
   world.scenarioHours = 0;
 }

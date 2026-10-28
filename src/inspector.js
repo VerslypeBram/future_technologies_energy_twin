@@ -40,7 +40,7 @@ export function createInspector({ camera, canvas, inspectables, outline }) {
     if (id === 'battery') return [`SoC ${fmt(batteryPercent(), 0)} %`, f.batteryKw > 0.05 ? `Laden ${kw(f.batteryKw)}` : f.batteryKw < -0.05 ? `Ontladen ${kw(-f.batteryKw)}` : 'Stand-by'];
     if (id === 'heater') return [state.heaterActive ? 'Bedrijf 2,0 kW' : 'Uit', `Setpoint ${fmt(state.targetTemp, 1)} °C`];
     if (id === 'meter') return [`Huis ${kw(f.home)}`, `Laadpalen ${kw(f.ev)}`, `Net ${kw(f.grid)}`];
-    if (id === 'grid') return [world.gridOnline ? `Afname ${kw(f.grid)}` : 'Storing', `Kosten ${fmt(state.cost, 2)} €`];
+    if (id === 'grid') return [world.gridOnline ? (f.export > 0.01 ? `Teruglevering ${kw(f.export)}` : `Afname ${kw(f.grid)}`) : 'Storing', `Kosten ${fmt(state.cost, 2)} €`];
     if (id.startsWith('car')) {
       const i = +id.slice(3);
       const car = state.cars[i];
