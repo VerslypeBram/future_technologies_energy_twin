@@ -69,7 +69,7 @@ export function parseCommand(text) {
   const t = normalize(text || '');
   if (!t) return null;
   const has = (re) => re.test(t);
-  const isOn = has(/\b(aan|start|activeer\w*|schakel in)\b/);
+  const isOn = has(/\b(aan|start|activeer\w*)\b|\b(schakel|zet|doe)\b.*\bin\b/);
   const isOff = has(/\b(uit|stop|deactiveer\w*|af)\b/);
   const onOff = isOn ? true : isOff ? false : null;
 
@@ -134,7 +134,7 @@ export function parseCommand(text) {
 
   // Schakelaars
   if (has(/extra batterij|tweede batterij/) && onOff !== null) return { intent: 'toggle', key: 'extraBattery', on: onOff };
-  if (has(/warmtepomp/) && onOff !== null) return { intent: 'toggle', key: 'heatPump', on: onOff };
+  if (has(/warmte ?pomp/)) return { intent: 'toggle', key: 'heatPump', on: onOff }; // zonder aan/uit: omschakelen
   if (has(/buitenverlichting|tuinverlichting|straatverlichting|buitenlicht/) && onOff !== null) return { intent: 'toggle', key: 'outdoorOn', on: onOff };
   if (has(/ventilat|ventilator/) && onOff !== null) return { intent: 'toggle', key: 'fanOn', on: onOff };
   if (has(/verwarming|radiator/) && onOff !== null) return { intent: 'toggle', key: 'heaterOn', on: onOff };
@@ -259,8 +259,9 @@ export function runCommand(cmd, actions = {}) {
       world.paused = cmd.paused;
       return cmd.paused ? 'Simulatie gepauzeerd.' : 'Simulatie hervat.';
     case 'toggle': {
-      state[cmd.key] = cmd.on;
-      const label = cmd.key === 'shuttersClosed' ? `Rolluiken ${cmd.on ? 'dicht' : 'open'}` : `${TOGGLE_LABEL[cmd.key]} ${aan(cmd.on)}`;
+      const on = cmd.on ?? !state[cmd.key];
+      state[cmd.key] = on;
+      const label = cmd.key === 'shuttersClosed' ? `Rolluiken ${on ? 'dicht' : 'open'}` : `${TOGGLE_LABEL[cmd.key]} ${aan(on)}`;
       return state.autoMode && ['fanOn', 'heaterOn', 'shuttersClosed', 'evCharging'].includes(cmd.key) ? `${label}. Let op: de automaat is actief en kan dit overschrijven.` : `${label}.`;
     }
     case 'windows':
