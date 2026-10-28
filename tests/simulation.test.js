@@ -40,7 +40,20 @@ describe('energiebalans', () => {
         const f = state.flows;
         const need = f.home + f.ev;
         // batteryKw: + laden, - ontladen
-        expect(f.solar + f.wind + f.grid - f.batteryKw).toBeCloseTo(need, 6);
+        expect(f.solar + f.wind + f.grid - f.export - f.batteryKw).toBeCloseTo(need, 6);
+      }
+    }
+  });
+
+  it('klopt ook met bijladen van het net en teruglevering', () => {
+    state.autoMode = true;
+    for (const [hour, battery] of [[3, 1], [13, 4.99], [19, 0.5]]) {
+      setHour(hour);
+      state.battery = battery;
+      for (let i = 0; i < 10; i++) {
+        step(0.1);
+        const f = state.flows;
+        expect(f.solar + f.wind + f.grid - f.export - f.batteryKw).toBeCloseTo(f.home + f.ev, 6);
       }
     }
   });
@@ -57,6 +70,73 @@ describe('energiebalans', () => {
     for (let i = 0; i < 20; i++) step(0.1);
     expect(baseline.flows.solar).toBe(0);
     expect(baseline.battery).toBe(0);
+  });
+});
+
+describe('batterij: net en export', () => {
+  beforeEach(() => {
+    state.autoMode = true;
+    state.extraBattery = false;
+    state.heaterOn = false;
+    state.cars.forEach((c) => (c.soc = 30));
+    world.baseOutside = 15;
+  });
+
+  it('laadt bij een goedkoop nachtuur bij van het net', () => {
+    setHour(3);
+    state.battery = 1;
+    step(0.1);
+    expect(state.flows.batteryKw).toBeGreaterThan(0);
+    expect(state.flows.grid).toBeGreaterThan(0);
+    expect(state.battery).toBeGreaterThan(1);
+  });
+
+  it('ontlaadt niet tijdens een goedkoop uur maar bewaart de reserve buiten de piek', () => {
+    setHour(3);
+    state.battery = 5;
+    step(0.1);
+    expect(state.flows.batteryKw).toBeLessThanOrEqual(0);
+    setHour(8); // duur maar geen piek, huis heeft verbruik
+    state.heaterOn = true;
+    state.insideTemp = 10;
+    state.battery = 0.9; // onder de reserve van 20% (1 kWh)
+    step(0.1);
+    expect(state.flows.batteryKw).toBeGreaterThanOrEqual(0);
+  });
+
+  it('gebruikt de reserve wel tijdens de piekprijs', () => {
+    setHour(19);
+    state.heaterOn = true;
+    state.insideTemp = 10;
+    state.cars.forEach((c) => (c.soc = 1)); // lage auto's laden, dus groot verbruik
+    state.battery = 0.9;
+    step(0.1);
+    expect(state.flows.batteryKw).toBeLessThan(0);
+  });
+
+  it('levert overschot terug als de batterij vol is en het opbrengt', () => {
+    setHour(13);
+    state.battery = 5;
+    state.cost = state.exportKwh = state.revenue = 0;
+    world.cloud = 0;
+    for (let i = 0; i < 10; i++) step(0.1);
+    expect(state.flows.export).toBeGreaterThan(0);
+    expect(state.exportKwh).toBeGreaterThan(0);
+    expect(state.revenue).toBeGreaterThan(0);
+    expect(sim.costEuro(state)).toBeLessThan(state.gridKwh * 1);
+  });
+
+  it('levert niets terug bij een stroomstoring', () => {
+    world.gridOnline = false;
+    setHour(13);
+    state.battery = 5;
+    step(0.1);
+    expect(state.flows.export).toBe(0);
+  });
+
+  it('feedInPrice is nooit negatief en lager dan de afnameprijs', () => {
+    expect(sim.feedInPrice(3)).toBeGreaterThanOrEqual(0);
+    expect(sim.feedInPrice(19)).toBeLessThan(priceAt(19));
   });
 });
 

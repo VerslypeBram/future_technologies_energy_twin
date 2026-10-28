@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { state, world, evPercent, batteryPercent, comfortScore, roomTemps } from './simulation.js';
+import { state, world, evPercent, batteryPercent, comfortScore, roomTemps, copAt, batteryCapacity, tankPercent } from './simulation.js';
 import { fmt } from './ui.js';
 
 // Hover-inspector: wijs een onderdeel aan voor een outline en live details.
@@ -28,6 +28,12 @@ export function createInspector({ camera, canvas, inspectables, outline }) {
     pointerClient = null;
   });
 
+  // Een verborgen groep (bijv. de uitgeschakelde warmtepomp) mag niet meer reageren
+  const isShown = (o) => {
+    for (let p = o; p; p = p.parent) if (!p.visible) return false;
+    return true;
+  };
+
   const kw = (n) => fmt(n, 1) + ' kW';
 
   function describe(id) {
@@ -39,8 +45,14 @@ export function createInspector({ camera, canvas, inspectables, outline }) {
     if (id === 'solar') return [`Opwek ${kw(f.solar)}`, `Totaal ${fmt(state.solarKwh, 2)} kWh`];
     if (id === 'battery') return [`SoC ${fmt(batteryPercent(), 0)} %`, f.batteryKw > 0.05 ? `Laden ${kw(f.batteryKw)}` : f.batteryKw < -0.05 ? `Ontladen ${kw(-f.batteryKw)}` : 'Stand-by'];
     if (id === 'heater') return [state.heaterActive ? 'Bedrijf 2,0 kW' : 'Uit', `Setpoint ${fmt(state.targetTemp, 1)} °C`];
+    if (id === 'heatpump') {
+      const cop = copAt(world.outsideTemp, state.heatPump);
+      return [state.heaterActive ? `Bedrijf ${kw(state.heaterKw)}` : 'Stand-by', `COP ${fmt(cop, 1)}`, `Warmte ${kw(state.heaterKw * cop)}`, `Buiten ${fmt(world.outsideTemp, 1)} °C`];
+    }
+    if (id === 'battery2') return [`SoC ${fmt(batteryPercent(), 0)} %`, `Capaciteit ${fmt(batteryCapacity(), 0)} kWh totaal`];
+    if (id === 'barrel') return [`Inhoud ${fmt(state.tankL, 0)} l (${fmt(tankPercent(), 0)} %)`, state.pumpKw > 0 ? `Pomp aan ${fmt(state.pumpKw * 1000, 0)} W` : 'Pomp uit'];
     if (id === 'meter') return [`Huis ${kw(f.home)}`, `Laadpalen ${kw(f.ev)}`, `Net ${kw(f.grid)}`];
-    if (id === 'grid') return [world.gridOnline ? `Afname ${kw(f.grid)}` : 'Storing', `Kosten ${fmt(state.cost, 2)} €`];
+    if (id === 'grid') return [world.gridOnline ? (f.export > 0.01 ? `Teruglevering ${kw(f.export)}` : `Afname ${kw(f.grid)}`) : 'Storing', `Kosten ${fmt(state.cost, 2)} €`];
     if (id.startsWith('car')) {
       const i = +id.slice(3);
       const car = state.cars[i];
@@ -77,7 +89,7 @@ export function createInspector({ camera, canvas, inspectables, outline }) {
         return;
       }
       raycaster.setFromCamera(pointer, camera);
-      const hit = raycaster.intersectObjects(meshes, false).find((h) => h.object.visible && h.object.userData.inspectId);
+      const hit = raycaster.intersectObjects(meshes, false).find((h) => isShown(h.object) && h.object.userData.inspectId);
       const id = hit ? hit.object.userData.inspectId : null;
       if (id !== hovered) {
         hovered = id;

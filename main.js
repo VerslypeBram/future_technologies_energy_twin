@@ -152,6 +152,8 @@ const sunDisc = createSunDisc(scene);
 const outdoor = createOutdoor(scene);
 const flows = createFlows(scene);
 flows.setVisible(false);
+const extras = createExtras(scene);
+inspectables.push(...extras.inspectables);
 const inspector = createInspector({ camera, canvas: renderer.domElement, inspectables, outline: post.outline });
 const labels = createLabels({ scene, cars, container: view, width: initial.w, height: initial.h });
 const history = createHistory();
@@ -161,7 +163,6 @@ const rig = createCameraRig(camera, controls, cars);
 const seasons = createSeasons(env);
 const snow = createSnow({ yard: env.yard, terrain: env.terrain, roofs, solarGroup, house, scene, clippingPlanes: cut.planes });
 const life = createLife(scene);
-const extras = createExtras(scene);
 
 let quality = 'high';
 let cutValue = 0;
